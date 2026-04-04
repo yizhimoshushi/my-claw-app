@@ -1,50 +1,82 @@
-from flask import Flask, Response
-from PIL import Image, ImageDraw, ImageFont
-import io
+from flask import Flask, render_template_string
 import datetime
 
 app = Flask(__name__)
 
+# --- 电子宠物类 ---
+class VirtualPet:
+    def __init__(self):
+        self.name = "Fluffy"
+        self.hunger = 50  # 饥饿值，越高越饿
+        self.happiness = 50 # 快乐值，越高越开心
+        self.last_interaction = datetime.datetime.now()
+
+    def feed(self):
+        self.hunger = max(0, self.hunger - 20)
+        self.happiness = min(100, self.happiness + 10)
+        self.last_interaction = datetime.datetime.now()
+        return f"你给 {self.name} 喂了一点食物。它看起来饱了一些！"
+
+    def play(self):
+        self.happiness = min(100, self.happiness + 20)
+        self.hunger = min(100, self.hunger + 10) # 玩耍会消耗能量
+        self.last_interaction = datetime.datetime.now()
+        return f"你和 {self.name} 玩了一会儿。它很开心！"
+
+    def status(self):
+        # 简单的“衰老”机制，每次查看状态，饥饿感会轻微增加
+        time_since_interaction = (datetime.datetime.now() - self.last_interaction).seconds / 60 # 分钟
+        self.hunger = min(100, self.hunger + time_since_interaction * 0.1) 
+        
+        status_text = f"""
+        <h2>我的电子宠物: {self.name}</h2>
+        <p> hunger: {self.hunger:.2f}/100 </p>
+        <p> happiness: {self.happiness:.2f}/100 </p>
+        <p> 最后互动时间: {self.last_interaction.strftime('%Y-%m-%d %H:%M:%S')} </p>
+        <hr>
+        <a href="/feed">[喂食]</a> | <a href="/play">[玩耍]</a> | <a href="/">[返回主页]</a>
+        """
+        
+        # 根据状态改变宠物的表情
+        if self.happiness < 30:
+            status_text += "<p> (´;ω;｀) 它看起来不太开心...</p>"
+        elif self.hunger > 70:
+            status_text += "<p> (｡>﹏<｡) 它看起来很饿...</p>"
+        else:
+            status_text += "<p> (◕‿◕) 它看起来状态不错！</p>"
+            
+        return status_text
+
+# --- 全局宠物实例 ---
+# 注意：在生产环境中，用全局变量存储状态是不可靠的，因为服务器重启后会丢失。
+# 但对于我们的免费实验，这是一个零成本的方案。
+pet = VirtualPet()
+
+# --- Flask 路由 ---
 @app.route('/')
-def hello():
-    return """
-    <h1>🎉 恭喜你！你的 Python 应用已经在 Claw Cloud 上运行了！</h1>
-    <p>点击下面的链接，动态生成一张带有时戳的图片：</p>
-    <a href="/generate-image" target="_blank">生成图片</a>
+def home():
+    html = f"""
+    <h1>欢迎来到电子宠物小屋！</h1>
+    <p>你的宠物正在等待你的关爱...</p>
+    <a href="/pet/status">[去看看它]</a>
     """
+    return html
 
-@app.route('/generate-image')
-def generate_image():
-    """动态生成一张包含当前时间的图片"""
-    
-    # 1. 创建一张空白图片 (宽度, 高度, 背景色)
-    img_width, img_height = 400, 200
-    img = Image.new('RGB', (img_width, img_height), color = (73, 109, 137))
-    
-    # 2. 创建一个绘图对象
-    d = ImageDraw.Draw(img)
+@app.route('/pet/status')
+def show_pet_status():
+    return pet.status()
 
-    # 3. 准备文字内容
-    current_time_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    text = f"当前时间戳:\n{current_time_str}"
+@app.route('/feed')
+def feed_pet():
+    message = pet.feed()
+    # 喂食后也显示状态
+    return message + "<br><br>" + pet.status()
 
-    # 4. (可选) 加载字体, 如果不加载，会使用默认字体
-    # font = ImageFont.truetype("arial.ttf", size=20) # Windows
-    # font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", size=20) # Linux
-    
-    # 5. 在图片上绘制文字
-    # d.text((x坐标, y坐标), 文字, fill=(R, G, B颜色))
-    d.text((50, 50), text, fill=(255, 255, 0)) # 黄色文字
+@app.route('/play')
+def play_with_pet():
+    message = pet.play()
+    # 玩耍后也显示状态
+    return message + "<br><br>" + pet.status()
 
-    # 6. 将图片保存到内存中的一个字节流
-    img_io = io.BytesIO()
-    img.save(img_io, 'PNG') # 保存为 PNG 格式
-    img_io.seek(0) # 将指针移到开头
-
-    # 7. 将内存中的图片作为 HTTP 响应返回
-    # Response(数据, mimetype=媒体类型)
-    return Response(img_io.getvalue(), mimetype='image/png')
-
-# 这部分在使用 Gunicorn 时会被忽略，因为我们用 CMD ["gunicorn", ...] 启动
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
