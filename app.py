@@ -32,7 +32,6 @@ class VirtualPet:
         <h2>我的电子宠物: {self.name}</h2>
         <p> hunger: {self.hunger:.2f}/100 </p>
         <p> happiness: {self.happiness:.2f}/100 </p>
-        <p> 最后互动时间: {self.last_interaction.strftime('%Y-%m-%d %H:%M:%S')} </p>
         <hr>
         <a href="/feed">[喂食]</a> | <a href="/play">[玩耍]</a> | <a href="/">[返回主页]</a>
         """
