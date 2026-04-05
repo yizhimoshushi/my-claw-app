@@ -9,6 +9,8 @@ from azure.core.credentials import AzureKeyCredential
 # 这样更安全，部署时可以通过环境变量注入
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 
+print(os.environ.get("GITHUB_TOKEN"))
+
 if not GITHUB_TOKEN:
     raise ValueError("必须设置环境变量 GITHUB_TOKEN")
 
