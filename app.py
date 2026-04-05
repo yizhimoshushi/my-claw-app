@@ -1,81 +1,159 @@
-from flask import Flask, render_template_string
-import datetime
+# app.py
+import os
+from flask import Flask, render_template_string, request, jsonify
+from azure.ai.inference import ChatCompletionsClient
+from azure.ai.inference.models import SystemMessage, UserMessage
+from azure.core.credentials import AzureKeyCredential
+
+# 从环境变量中获取 GitHub Token
+# 这样更安全，部署时可以通过环境变量注入
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
+
+if not GITHUB_TOKEN:
+    raise ValueError("必须设置环境变量 GITHUB_TOKEN")
+
+# 初始化 Azure 客户端
+client = ChatCompletionsClient(
+    endpoint="https://models.github.ai/inference",
+    credential=AzureKeyCredential(GITHUB_TOKEN),
+)
 
 app = Flask(__name__)
 
-# --- 电子宠物类 ---
-class VirtualPet:
-    def __init__(self):
-        self.name = "Fluffy"
-        self.hunger = 50  # 饥饿值，越高越饿
-        self.happiness = 50 # 快乐值，越高越开心
-        self.last_interaction = datetime.datetime.now()
+# 简单的 HTML 模板
+HTML_TEMPLATE = '''
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Github AI 聊天</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background-color: #f0f0f0; }
+        #chat-container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        #messages { height: 400px; overflow-y: scroll; border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; background-color: #fafafa; }
+        .message { margin: 10px 0; padding: 8px; border-radius: 5px; }
+        .user-message { background-color: #d1ecf1; text-align: right; }
+        .ai-message { background-color: #f8f9fa; }
+        #input-area { display: flex; }
+        #user-input { flex-grow: 1; padding: 10px; border: 1px solid #ddd; border-radius: 5px; }
+        #send-button { padding: 10px 20px; margin-left: 10px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        #send-button:hover { background-color: #0056b3; }
+        .typing-indicator { color: gray; font-style: italic; }
+    </style>
+</head>
+<body>
+    <div id="chat-container">
+        <h2>Github AI 聊天室</h2>
+        <div id="messages"></div>
+        <div id="input-area">
+            <input type="text" id="user-input" placeholder="输入消息..." onkeypress="handleKeyPress(event)">
+            <button id="send-button" onclick="sendMessage()">发送</button>
+        </div>
+    </div>
 
-    def feed(self):
-        self.hunger = max(0, self.hunger - 20)
-        self.happiness = min(100, self.happiness + 10)
-        self.last_interaction = datetime.datetime.now()
-        return f"你给 {self.name} 喂了一点食物。它看起来饱了一些！"
+    <script>
+        function addMessage(sender, text) {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message ' + sender + '-message';
+            messageDiv.textContent = text;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
 
-    def play(self):
-        self.happiness = min(100, self.happiness + 20)
-        self.hunger = min(100, self.hunger + 10) # 玩耍会消耗能量
-        self.last_interaction = datetime.datetime.now()
-        return f"你和 {self.name} 玩了一会儿。它很开心！"
+        function showTypingIndicator() {
+            const messagesDiv = document.getElementById('messages');
+            const typingDiv = document.createElement('div');
+            typingDiv.id = 'typing-indicator';
+            typingDiv.className = 'message ai-message typing-indicator';
+            typingDiv.textContent = 'AI 正在思考...';
+            messagesDiv.appendChild(typingDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
 
-    def status(self):
-        # 简单的“衰老”机制，每次查看状态，饥饿感会轻微增加
-        time_since_interaction = (datetime.datetime.now() - self.last_interaction).seconds / 60 # 分钟
-        self.hunger = min(100, self.hunger + time_since_interaction * 0.1) 
-        
-        status_text = f"""
-        <h2>我的电子宠物: {self.name}</h2>
-        <p> hunger: {self.hunger:.2f}/100 </p>
-        <p> happiness: {self.happiness:.2f}/100 </p>
-        <hr>
-        <a href="/feed">[喂食]</a> | <a href="/play">[玩耍]</a> | <a href="/">[返回主页]</a>
-        """
-        
-        # 根据状态改变宠物的表情
-        if self.happiness < 30:
-            status_text += "<p> (´;ω;｀) 它看起来不太开心...</p>"
-        elif self.hunger > 70:
-            status_text += "<p> (｡>﹏<｡) 它看起来很饿...</p>"
-        else:
-            status_text += "<p> (◕‿◕) 它看起来状态不错！</p>"
+        function hideTypingIndicator() {
+            const typingElement = document.getElementById('typing-indicator');
+            if (typingElement) {
+                typingElement.remove();
+            }
+        }
+
+        async function sendMessage() {
+            const inputElement = document.getElementById('user-input');
+            const userMessage = inputElement.value.trim();
+            if (!userMessage) return;
+
+            addMessage('user', userMessage);
+            inputElement.value = '';
             
-        return status_text
+            showTypingIndicator();
 
-# --- 全局宠物实例 ---
-# 注意：在生产环境中，用全局变量存储状态是不可靠的，因为服务器重启后会丢失。
-# 但对于我们的免费实验，这是一个零成本的方案。
-pet = VirtualPet()
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: userMessage })
+                });
 
-# --- Flask 路由 ---
+                const data = await response.json();
+                
+                hideTypingIndicator();
+                addMessage('ai', data.response);
+
+            } catch (error) {
+                console.error('Error:', error);
+                hideTypingIndicator();
+                addMessage('ai', '发生错误: ' + error.message);
+            }
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+    </script>
+</body>
+</html>
+'''
+
 @app.route('/')
-def home():
-    html = f"""
-    <h1>欢迎来到电子宠物小屋！</h1>
-    <p>你的宠物正在等待你的关爱...</p>
-    <a href="/pet/status">[去看看它]</a>
-    """
-    return html
+def index():
+    return render_template_string(HTML_TEMPLATE)
 
-@app.route('/pet/status')
-def show_pet_status():
-    return pet.status()
+@app.route('/chat', methods=['POST'])
+def chat():
+    user_message = request.json.get('message')
+    if not user_message:
+        return jsonify({"error": "未提供消息"}), 400
 
-@app.route('/feed')
-def feed_pet():
-    message = pet.feed()
-    # 喂食后也显示状态
-    return message + "<br><br>" + pet.status()
+    try:
+        response = client.complete(
+            messages=[
+                SystemMessage(content="You are a helpful assistant."),
+                UserMessage(content=user_message),
+            ],
+            temperature=0.7,
+            max_tokens=1000,
+        )
+        ai_response = response.choices[0].message.content
+        return jsonify({"response": ai_response})
 
-@app.route('/play')
-def play_with_pet():
-    message = pet.play()
-    # 玩耍后也显示状态
-    return message + "<br><br>" + pet.status()
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# 这是 Cloudfare Docker Worker 期望的入口点
+# 它告诉 Gunicorn 如何加载你的应用
+def main():
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    # 当直接运行此脚本时（本地调试），使用 Flask 内置服务器
+    # 在 Docker 容器中，应由 Gunicorn 启动，此时 PORT 环境变量会被设置
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == 'gunicorn':
+        main()
+    else:
+        print("请使用 Gunicorn 启动应用: gunicorn --bind 0.0.0.0:8080 app:app")
+        print("或者设置环境变量 GITHUB_TOKEN 后运行: python app.py")
+        app.run(debug=True, host='127.0.0.1', port=5000)
