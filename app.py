@@ -1,35 +1,25 @@
 import os
 from flask import Flask, render_template_string, request, jsonify
-from azure.ai.inference import ChatCompletionsClient
-from azure.ai.inference.models import SystemMessage, UserMessage
-from azure.core.credentials import AzureKeyCredential
+from openai import OpenAI
 
 app = Flask(__name__)
 
-# 1. 获取 Token
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
+# 1. 初始化 OpenRouter 客户端
+# 注意：这里直接使用了你提供的 Key，实际部署时建议放在环境变量里更安全
+OPENROUTER_API_KEY = os.environ.get("GITHUB_TOKEN")
 
-# 2. 初始化客户端 (放在全局，避免每次请求都重新连接)
-client = None
-if GITHUB_TOKEN:
-    try:
-        client = ChatCompletionsClient(
-            endpoint="https://models.github.ai/inference",
-            credential=AzureKeyCredential(GITHUB_TOKEN),
-        )
-        print("✅ Azure AI 客户端初始化成功")
-    except Exception as e:
-        print(f"❌ 客户端初始化失败: {e}")
-else:
-    print("⚠️ 警告: 未找到 GITHUB_TOKEN 环境变量，AI 功能将无法使用")
+client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=OPENROUTER_API_KEY,
+)
 
-# HTML 模板保持不变
+# HTML 模板 (保持原样，界面不变)
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>Github AI 聊天</title>
+    <title>Qwen3.6 Plus 聊天</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 40px; background-color: #f0f0f0; }
         #chat-container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
@@ -46,7 +36,7 @@ HTML_TEMPLATE = '''
 </head>
 <body>
     <div id="chat-container">
-        <h2>Github AI 聊天室</h2>
+        <h2>Qwen3.6 Plus 聊天室 (1M Context)</h2>
         <div id="messages"></div>
         <div id="input-area">
             <input type="text" id="user-input" placeholder="输入消息..." onkeypress="handleKeyPress(event)">
@@ -126,51 +116,49 @@ HTML_TEMPLATE = '''
 
 @app.route('/')
 def index():
-    if not client:
-        return "服务器错误：未配置 GITHUB_TOKEN，请检查环境变量。", 500
     return render_template_string(HTML_TEMPLATE)
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    if not client:
-        return jsonify({"error": "服务器未配置 Token"}), 500
-
     user_message = request.json.get('message')
     if not user_message:
         return jsonify({"error": "未提供消息"}), 400
 
     try:
-        # 调用 AI
-        response = client.complete(
+        # 调用 OpenRouter (Qwen3.6 Plus)
+        response = client.chat.completions.create(
+            model="qwen/qwen3.6-plus:free", # 使用你指定的模型
+            extra_headers={
+                "HTTP-Referer": "http://localhost:5000", 
+                "X-Title": "Qwen Chat App",
+            },
             messages=[
-                SystemMessage(content="You are a helpful assistant."),
-                UserMessage(content=user_message),
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": user_message},
             ],
-            model="deepseek/DeepSeek-V3-0324",
             temperature=0.7,
-            max_tokens=1000,
+            max_tokens=4000 # 稍微调大一点，因为它是免费且强大的模型
         )
         
-        # 检查返回结果是否有效
+        # 检查返回结果
         if not response.choices:
-            return jsonify({"error": "AI 返回了空结果，可能是触发了频率限制"}), 500
+            return jsonify({"error": "AI 返回了空结果"}), 500
             
         ai_response = response.choices[0].message.content
         return jsonify({"response": ai_response})
 
     except Exception as e:
-        # 关键修改：打印详细错误日志，并返回友好的 JSON 错误
         import traceback
         error_log = traceback.format_exc()
-        print(f"❌ AI 调用错误:\n{error_log}") # 这会在 ClawCloud 日志里显示
+        print(f"❌ AI 调用错误:\n{error_log}")
         
-        # 判断是否是常见的频率限制或网络错误
         error_msg = str(e)
+        # 针对 OpenRouter 的常见错误处理
         if "429" in error_msg:
             return jsonify({"error": "请求太频繁了，请休息一分钟再试 (429 Rate Limit)"}), 429
+        elif "402" in error_msg:
+            return jsonify({"error": "账户余额不足或模型不再免费"}), 402
         elif "Connection" in error_msg or "network" in error_msg.lower():
-            return jsonify({"error": "服务器连接 AI 失败，请检查网络或稍后重试"}), 502
+            return jsonify({"error": "服务器连接 OpenRouter 失败，请检查网络"}), 502
         else:
             return jsonify({"error": f"AI 服务出错: {error_msg[:50]}..."}), 500
-
-# 移除复杂的 __main__ 逻辑，完全交给 Gunicorn 处理
