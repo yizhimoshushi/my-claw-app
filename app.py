@@ -1,4 +1,12 @@
 # app.py
+
+# --- 最关键的修改：放在文件最顶端 ---
+print("=== DEBUG: app.py is being executed ===")
+token_value = __import__('os').environ.get("GITHUB_TOKEN")
+print(f"DEBUG: The value of GITHUB_TOKEN is: '{token_value}'")
+print("=== DEBUG END ===")
+
+
 import os
 from flask import Flask, render_template_string, request, jsonify
 from azure.ai.inference import ChatCompletionsClient
