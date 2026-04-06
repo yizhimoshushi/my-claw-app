@@ -1,12 +1,4 @@
 # app.py
-
-# --- 最关键的修改：放在文件最顶端 ---
-print("=== DEBUG: app.py is being executed ===")
-token_value = __import__('os').environ.get("GITHUB_TOKEN")
-print(f"DEBUG: The value of GITHUB_TOKEN is: '{token_value}'")
-print("=== DEBUG END ===")
-
-
 import os
 from flask import Flask, render_template_string, request, jsonify
 from azure.ai.inference import ChatCompletionsClient
@@ -16,8 +8,6 @@ from azure.core.credentials import AzureKeyCredential
 # 从环境变量中获取 GitHub Token
 # 这样更安全，部署时可以通过环境变量注入
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
-
-print(os.environ.get("GITHUB_TOKEN"))
 
 if not GITHUB_TOKEN:
     raise ValueError("必须设置环境变量 GITHUB_TOKEN")
