@@ -132,33 +132,45 @@ def index():
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    # 1. 检查客户端是否初始化
     if not client:
         return jsonify({"error": "服务器未配置 Token"}), 500
 
-    # 2. 获取用户消息
     user_message = request.json.get('message')
     if not user_message:
         return jsonify({"error": "未提供消息"}), 400
 
     try:
-        # 3. 调用 AI (增加了 model 参数)
+        # 调用 AI
         response = client.complete(
             messages=[
                 SystemMessage(content="You are a helpful assistant."),
                 UserMessage(content=user_message),
             ],
-            model="deepseek/DeepSeek-V3-0324", # 显式指定模型
+            model="deepseek/DeepSeek-V3-0324",
             temperature=0.7,
             max_tokens=1000,
         )
+        
+        # 检查返回结果是否有效
+        if not response.choices:
+            return jsonify({"error": "AI 返回了空结果，可能是触发了频率限制"}), 500
+            
         ai_response = response.choices[0].message.content
         return jsonify({"response": ai_response})
 
     except Exception as e:
-        # 打印详细错误到服务器日志
+        # 关键修改：打印详细错误日志，并返回友好的 JSON 错误
         import traceback
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+        error_log = traceback.format_exc()
+        print(f"❌ AI 调用错误:\n{error_log}") # 这会在 ClawCloud 日志里显示
+        
+        # 判断是否是常见的频率限制或网络错误
+        error_msg = str(e)
+        if "429" in error_msg:
+            return jsonify({"error": "请求太频繁了，请休息一分钟再试 (429 Rate Limit)"}), 429
+        elif "Connection" in error_msg or "network" in error_msg.lower():
+            return jsonify({"error": "服务器连接 AI 失败，请检查网络或稍后重试"}), 502
+        else:
+            return jsonify({"error": f"AI 服务出错: {error_msg[:50]}..."}), 500
 
 # 移除复杂的 __main__ 逻辑，完全交给 Gunicorn 处理
