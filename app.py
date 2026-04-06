@@ -5,7 +5,6 @@ from openai import OpenAI
 app = Flask(__name__)
 
 # 1. 初始化 OpenRouter 客户端
-# 注意：这里直接使用了你提供的 Key，实际部署时建议放在环境变量里更安全
 OPENROUTER_API_KEY = os.environ.get("GITHUB_TOKEN")
 
 client = OpenAI(
@@ -13,13 +12,13 @@ client = OpenAI(
     api_key=OPENROUTER_API_KEY,
 )
 
-# HTML 模板 (保持原样，界面不变)
+# HTML 模板 (保持不变)
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>Qwen3.6 Plus 聊天</title>
+    <title>Qwen3.6 Plus 聊天 (带记忆)</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 40px; background-color: #f0f0f0; }
         #chat-container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
@@ -36,7 +35,7 @@ HTML_TEMPLATE = '''
 </head>
 <body>
     <div id="chat-container">
-        <h2>Qwen3.6 Plus 聊天室 (1M Context)</h2>
+        <h2>Qwen3.6 Plus (有记忆版)</h2>
         <div id="messages"></div>
         <div id="input-area">
             <input type="text" id="user-input" placeholder="输入消息..." onkeypress="handleKeyPress(event)">
@@ -114,6 +113,13 @@ HTML_TEMPLATE = '''
 </html>
 '''
 
+# ==========================================
+# 核心修改区域：添加一个简单的全局内存存储
+# ==========================================
+# 注意：这是存在内存里的，重启服务器后记忆会消失。
+# 如果是多用户环境，应该用数据库或 Redis，但为了简单演示，我们用字典。
+user_history = {}
+
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
@@ -124,27 +130,43 @@ def chat():
     if not user_message:
         return jsonify({"error": "未提供消息"}), 400
 
+    # 模拟一个固定用户ID (实际应用中应该用 session 或 cookie)
+    user_id = "default_user" 
+    
+    # 1. 初始化该用户的聊天记录
+    if user_id not in user_history:
+        user_history[user_id] = []
+
+    # 2. 把用户的新消息加入历史
+    user_history[user_id].append({"role": "user", "content": user_message})
+
     try:
-        # 调用 OpenRouter (Qwen3.6 Plus)
+        # 3. 调用 API，发送完整的聊天记录
         response = client.chat.completions.create(
-            model="qwen/qwen3.6-plus:free", # 使用你指定的模型
+            model="qwen/qwen3.6-plus:free",
             extra_headers={
                 "HTTP-Referer": "http://localhost:5000", 
                 "X-Title": "Qwen Chat App",
             },
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": user_message},
-            ],
+            messages=user_history[user_id], # 这里传入了历史列表
             temperature=0.7,
-            max_tokens=4000 # 稍微调大一点，因为它是免费且强大的模型
+            max_tokens=4000
         )
         
-        # 检查返回结果
         if not response.choices:
             return jsonify({"error": "AI 返回了空结果"}), 500
             
         ai_response = response.choices[0].message.content
+        
+        # 4. 把 AI 的回复也加入历史，这样下一轮对话它才记得
+        user_history[user_id].append({"role": "assistant", "content": ai_response})
+
+        # 5. 简单的记忆清理机制：如果对话超过 20 条，删掉最早的 2 条（防止 Token 溢出）
+        if len(user_history[user_id]) > 20:
+            # 保留第一条系统提示（如果有）和最近的对话
+            # 这里简单处理：直接切片保留最后 18 条
+            user_history[user_id] = user_history[user_id][-18:]
+
         return jsonify({"response": ai_response})
 
     except Exception as e:
@@ -153,7 +175,6 @@ def chat():
         print(f"❌ AI 调用错误:\n{error_log}")
         
         error_msg = str(e)
-        # 针对 OpenRouter 的常见错误处理
         if "429" in error_msg:
             return jsonify({"error": "请求太频繁了，请休息一分钟再试 (429 Rate Limit)"}), 429
         elif "402" in error_msg:
