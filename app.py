@@ -1,26 +1,29 @@
-# app.py
 import os
 from flask import Flask, render_template_string, request, jsonify
 from azure.ai.inference import ChatCompletionsClient
 from azure.ai.inference.models import SystemMessage, UserMessage
 from azure.core.credentials import AzureKeyCredential
 
-# 从环境变量中获取 GitHub Token
-# 这样更安全，部署时可以通过环境变量注入
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
-
-if not GITHUB_TOKEN:
-    raise ValueError("必须设置环境变量 GITHUB_TOKEN")
-
-# 初始化 Azure 客户端
-client = ChatCompletionsClient(
-    endpoint="https://models.github.ai/inference",
-    credential=AzureKeyCredential(GITHUB_TOKEN),
-)
-
 app = Flask(__name__)
 
-# 简单的 HTML 模板
+# 1. 获取 Token
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
+
+# 2. 初始化客户端 (放在全局，避免每次请求都重新连接)
+client = None
+if GITHUB_TOKEN:
+    try:
+        client = ChatCompletionsClient(
+            endpoint="https://models.github.ai/inference",
+            credential=AzureKeyCredential(GITHUB_TOKEN),
+        )
+        print("✅ Azure AI 客户端初始化成功")
+    except Exception as e:
+        print(f"❌ 客户端初始化失败: {e}")
+else:
+    print("⚠️ 警告: 未找到 GITHUB_TOKEN 环境变量，AI 功能将无法使用")
+
+# HTML 模板保持不变
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -98,12 +101,16 @@ HTML_TEMPLATE = '''
                 const data = await response.json();
                 
                 hideTypingIndicator();
-                addMessage('ai', data.response);
+                if(data.error) {
+                    addMessage('ai', '❌ 错误: ' + data.error);
+                } else {
+                    addMessage('ai', data.response);
+                }
 
             } catch (error) {
                 console.error('Error:', error);
                 hideTypingIndicator();
-                addMessage('ai', '发生错误: ' + error.message);
+                addMessage('ai', '发生网络错误: ' + error.message);
             }
         }
 
@@ -119,20 +126,29 @@ HTML_TEMPLATE = '''
 
 @app.route('/')
 def index():
+    if not client:
+        return "服务器错误：未配置 GITHUB_TOKEN，请检查环境变量。", 500
     return render_template_string(HTML_TEMPLATE)
 
 @app.route('/chat', methods=['POST'])
 def chat():
+    # 1. 检查客户端是否初始化
+    if not client:
+        return jsonify({"error": "服务器未配置 Token"}), 500
+
+    # 2. 获取用户消息
     user_message = request.json.get('message')
     if not user_message:
         return jsonify({"error": "未提供消息"}), 400
 
     try:
+        # 3. 调用 AI (增加了 model 参数)
         response = client.complete(
             messages=[
                 SystemMessage(content="You are a helpful assistant."),
                 UserMessage(content=user_message),
             ],
+            model="deepseek/DeepSeek-V3-0324", # 显式指定模型
             temperature=0.7,
             max_tokens=1000,
         )
@@ -140,20 +156,9 @@ def chat():
         return jsonify({"response": ai_response})
 
     except Exception as e:
+        # 打印详细错误到服务器日志
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-# 这是 Cloudfare Docker Worker 期望的入口点
-# 它告诉 Gunicorn 如何加载你的应用
-def main():
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
-
-if __name__ == '__main__':
-    # 当直接运行此脚本时（本地调试），使用 Flask 内置服务器
-    # 在 Docker 容器中，应由 Gunicorn 启动，此时 PORT 环境变量会被设置
-    import sys
-    if len(sys.argv) > 1 and sys.argv[1] == 'gunicorn':
-        main()
-    else:
-        print("请使用 Gunicorn 启动应用: gunicorn --bind 0.0.0.0:8080 app:app")
-        print("或者设置环境变量 GITHUB_TOKEN 后运行: python app.py")
-        app.run(debug=True, host='127.0.0.1', port=5000)
+# 移除复杂的 __main__ 逻辑，完全交给 Gunicorn 处理
