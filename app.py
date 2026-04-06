@@ -145,7 +145,7 @@ def chat():
 # 这是 Cloudfare Docker Worker 期望的入口点
 # 它告诉 Gunicorn 如何加载你的应用
 def main():
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
 
 if __name__ == '__main__':
     # 当直接运行此脚本时（本地调试），使用 Flask 内置服务器
