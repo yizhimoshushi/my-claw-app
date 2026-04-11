@@ -34,36 +34,235 @@ HTML_TEMPLATE = '''
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>Qwen3.6 Plus (本地记忆版)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>与星星聊天</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 40px; background-color: #f0f0f0; }
-        #chat-container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        #messages { height: 400px; overflow-y: scroll; border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; background-color: #fafafa; }
-        .message { margin: 10px 0; padding: 8px; border-radius: 5px; }
-        .user-message { background-color: #d1ecf1; text-align: right; }
-        .ai-message { background-color: #f8f9fa; }
-        #input-area { display: flex; }
-        #user-input { flex-grow: 1; padding: 10px; border: 1px solid #ddd; border-radius: 5px; }
-        #send-button { padding: 10px 20px; margin-left: 10px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
-        #send-button:hover { background-color: #0056b3; }
-        .typing-indicator { color: gray; font-style: italic; }
-        #clear-btn { padding: 10px 20px; margin-left: 10px; background-color: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-chat: rgba(25, 35, 60, 0.8); /* 半透明背景 */
+            --text-primary: #e6e6e6;
+            --text-accent: #4cc9f0;
+            --user-bubble: #4cc9f0;
+            --ai-bubble: #4361ee;
+            --border-radius: 18px;
+            --font-main: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font-main);
+            background: linear-gradient(135deg, var(--bg-primary), var(--bg-secondary));
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        #chat-container {
+            width: 100%;
+            max-width: 500px;
+            height: 85vh;
+            max-height: 800px;
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-chat);
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px); /* 毛玻璃效果 */
+        }
+
+        #header {
+            text-align: center;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.2);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        #header h1 {
+            font-size: 1.8rem;
+            color: var(--text-accent);
+            margin-bottom: 5px;
+        }
+
+        #header p {
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+
+        #messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .message {
+            max-width: 80%;
+            padding: 12px 18px;
+            border-radius: var(--border-radius);
+            word-wrap: break-word;
+            line-height: 1.5;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .user-message {
+            background-color: var(--user-bubble);
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 5px;
+        }
+
+        .ai-message {
+            background-color: var(--ai-bubble);
+            color: white;
+            align-self: flex-start;
+            border-bottom-left-radius: 5px;
+        }
+
+        .typing-indicator {
+            background-color: var(--ai-bubble);
+            color: white;
+            align-self: flex-start;
+            border-bottom-left-radius: 5px;
+            font-style: italic;
+            padding: 12px 18px;
+            font-size: 0.9em;
+        }
+
+        #input-area {
+            display: flex;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.2);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        #user-input {
+            flex: 1;
+            padding: 14px 18px;
+            border: none;
+            border-radius: 30px;
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-primary);
+            font-size: 1rem;
+            outline: none;
+        }
+
+        #user-input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        #send-button, #clear-btn {
+            padding: 14px 20px;
+            margin-left: 10px;
+            border: none;
+            border-radius: 30px;
+            color: white;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s ease;
+        }
+
+        #send-button {
+            background-color: var(--text-accent);
+        }
+
+        #send-button:hover {
+            background-color: #3aa8d0;
+            transform: scale(1.03);
+        }
+
+        #clear-btn {
+            background-color: #ef4444;
+        }
+
+        #clear-btn:hover {
+            background-color: #dc2626;
+            transform: scale(1.03);
+        }
+
+        /* 手机端适配 */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+
+            #chat-container {
+                height: 95vh;
+                border-radius: 15px;
+            }
+
+            #header h1 {
+                font-size: 1.5rem;
+            }
+
+            .message {
+                max-width: 90%;
+                padding: 10px 15px;
+                font-size: 0.95rem;
+            }
+
+            #user-input, #send-button, #clear-btn {
+                padding: 12px 16px;
+                font-size: 0.95rem;
+            }
+
+            #input-area {
+                padding: 12px;
+            }
+        }
+
+        /* 小尺寸手机适配 */
+        @media (max-width: 480px) {
+            .message {
+                max-width: 95%;
+                padding: 9px 13px;
+                font-size: 0.9rem;
+            }
+
+            #user-input {
+                padding: 11px 14px;
+            }
+
+            #send-button, #clear-btn {
+                padding: 11px 15px;
+                font-size: 0.9rem;
+            }
+        }
     </style>
 </head>
 <body>
     <div id="chat-container">
-        <h2>Qwen3.6 Plus (记忆在浏览器)</h2>
+        <div id="header">
+            <h1>✨ 你好，我是星星</h1>
+            <p>一个温暖的AI朋友，随时陪你聊天</p>
+        </div>
         <div id="messages"></div>
         <div id="input-area">
-            <input type="text" id="user-input" placeholder="输入消息..." onkeypress="handleKeyPress(event)">
-            <button id="send-button" onclick="sendMessage()">发送</button>
-            <button id="clear-btn" onclick="clearHistory()">清空记忆</button>
+            <input type="text" id="user-input" placeholder="对星星说点什么吧...">
+            <button id="send-button">发送</button>
+            <button id="clear-btn">清空记忆</button>
         </div>
     </div>
 
     <script>
         // --- 1. 初始化：从浏览器本地存储读取历史 ---
-        let chatHistory = JSON.parse(localStorage.getItem('qwen_chat_history')) || [];
+        let chatHistory = JSON.parse(localStorage.getItem('star_chat_history')) || [];
 
         // 页面加载时，把历史显示出来
         window.onload = function() {
@@ -83,13 +282,13 @@ HTML_TEMPLATE = '''
             if (chatHistory.length > 20) {
                 chatHistory = chatHistory.slice(-20);
             }
-            localStorage.setItem('qwen_chat_history', JSON.stringify(chatHistory));
+            localStorage.setItem('star_chat_history', JSON.stringify(chatHistory));
         }
 
         // --- 3. 清空历史 ---
         function clearHistory() {
             chatHistory = [];
-            localStorage.removeItem('qwen_chat_history');
+            localStorage.removeItem('star_chat_history');
             location.reload(); // 刷新页面清空界面
         }
 
@@ -106,8 +305,8 @@ HTML_TEMPLATE = '''
             const messagesDiv = document.getElementById('messages');
             const typingDiv = document.createElement('div');
             typingDiv.id = 'typing-indicator';
-            typingDiv.className = 'message ai-message typing-indicator';
-            typingDiv.textContent = 'AI 正在思考...';
+            typingDiv.className = 'typing-indicator';
+            typingDiv.textContent = '⭐ 星星正在思考...';
             messagesDiv.appendChild(typingDiv);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
@@ -166,6 +365,9 @@ HTML_TEMPLATE = '''
                 sendMessage();
             }
         }
+
+        // 聚焦输入框
+        document.getElementById('user-input').focus();
     </script>
 </body>
 </html>
