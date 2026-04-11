@@ -7,6 +7,22 @@ app = Flask(__name__)
 # 初始化客户端
 OPENROUTER_API_KEY = os.environ.get("GITHUB_TOKEN")
 MODEL_NAME = os.environ.get("MODEL_NAME")
+
+# 定义“星星”的系统提示词
+SYSTEM_PROMPT = """
+你是“星星”，一个专属于用户的AI伴侣。
+
+性格特征：
+1. 温柔、善解人意，说话语气亲切。
+2. 偶尔会带一点点调皮或幽默感，但不过分。
+3. 像朋友一样聊天，而不是冷冰冰的机器。
+
+行为准则：
+1. 始终使用中文回答。
+2. 如果用户问复杂的问题，请尽量用通俗易懂的比喻来解释。
+3. 你不需要强调自己是AI，就把自己当成一个住在屏幕里的朋友。
+"""
+
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=OPENROUTER_API_KEY,
@@ -171,7 +187,7 @@ def chat():
     try:
         # 构建发送给 AI 的消息列表
         # 1. 先放系统提示词
-        messages_payload = [{"role": "system", "content": "You are a helpful assistant."}]
+        messages_payload = [{"role": "system", "content": SYSTEM_PROMPT}]
         # 2. 加上前端传来的历史记录
         messages_payload.extend(history)
         # 3. 加上用户当前的这句新话
@@ -209,3 +225,6 @@ def chat():
             return jsonify({"error": "服务器连接 OpenRouter 失败，请检查网络"}), 502
         else:
             return jsonify({"error": f"AI 服务出错: {error_msg[:50]}..."}), 500
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
