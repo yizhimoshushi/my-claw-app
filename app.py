@@ -40,11 +40,11 @@ HTML_TEMPLATE = '''
         :root {
             --bg-primary: #1a1a2e;
             --bg-secondary: #16213e;
-            --bg-chat: rgba(25, 35, 60, 0.8); /* 半透明背景 */
+            --bg-chat: #1e1e3c;
             --text-primary: #e6e6e6;
             --text-accent: #4cc9f0;
-            --user-bubble: #4cc9f0;
-            --ai-bubble: #4361ee;
+            --user-bubble: #4361ee;
+            --ai-bubble: #3a0ca3;
             --border-radius: 18px;
             --font-main: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
         }
@@ -63,7 +63,7 @@ HTML_TEMPLATE = '''
             display: flex;
             justify-content: center;
             align-items: center;
-            padding: 20px;
+            padding: 10px; /* 增加移动端内边距 */
         }
 
         #chat-container {
@@ -77,7 +77,6 @@ HTML_TEMPLATE = '''
             border-radius: 20px;
             overflow: hidden;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-            backdrop-filter: blur(10px); /* 毛玻璃效果 */
         }
 
         #header {
@@ -105,6 +104,7 @@ HTML_TEMPLATE = '''
             display: flex;
             flex-direction: column;
             gap: 15px;
+            background: rgba(0, 0, 0, 0.1); /* 添加轻微背景色区分 */
         }
 
         .message {
@@ -113,12 +113,6 @@ HTML_TEMPLATE = '''
             border-radius: var(--border-radius);
             word-wrap: break-word;
             line-height: 1.5;
-            animation: fadeIn 0.3s ease-out;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
         }
 
         .user-message {
@@ -139,7 +133,7 @@ HTML_TEMPLATE = '''
             background-color: var(--ai-bubble);
             color: white;
             align-self: flex-start;
-            border-bottom-left-radius: 5px;
+            border-bottom-left-radius: var(--border-radius);
             font-style: italic;
             padding: 12px 18px;
             font-size: 0.9em;
@@ -163,19 +157,24 @@ HTML_TEMPLATE = '''
             outline: none;
         }
 
+        #user-input:focus {
+             background: rgba(255, 255, 255, 0.15);
+        }
+
         #user-input::placeholder {
             color: rgba(255, 255, 255, 0.5);
         }
 
-        #send-button, #clear-btn {
-            padding: 14px 20px;
-            margin-left: 10px;
+        button {
             border: none;
             border-radius: 30px;
             color: white;
             cursor: pointer;
             font-weight: bold;
             transition: all 0.2s ease;
+            padding: 14px 20px;
+            font-size: 1rem;
+            margin-left: 10px; /* 按钮之间有间距 */
         }
 
         #send-button {
@@ -184,7 +183,6 @@ HTML_TEMPLATE = '''
 
         #send-button:hover {
             background-color: #3aa8d0;
-            transform: scale(1.03);
         }
 
         #clear-btn {
@@ -193,15 +191,10 @@ HTML_TEMPLATE = '''
 
         #clear-btn:hover {
             background-color: #dc2626;
-            transform: scale(1.03);
         }
 
-        /* 手机端适配 */
+        /* 移动端适配 */
         @media (max-width: 768px) {
-            body {
-                padding: 10px;
-            }
-
             #chat-container {
                 height: 95vh;
                 border-radius: 15px;
@@ -217,7 +210,7 @@ HTML_TEMPLATE = '''
                 font-size: 0.95rem;
             }
 
-            #user-input, #send-button, #clear-btn {
+            #user-input, button {
                 padding: 12px 16px;
                 font-size: 0.95rem;
             }
@@ -225,9 +218,12 @@ HTML_TEMPLATE = '''
             #input-area {
                 padding: 12px;
             }
+            
+            button {
+                 margin-left: 8px; /* 移动端按钮间距稍小 */
+            }
         }
 
-        /* 小尺寸手机适配 */
         @media (max-width: 480px) {
             .message {
                 max-width: 95%;
@@ -235,13 +231,19 @@ HTML_TEMPLATE = '''
                 font-size: 0.9rem;
             }
 
-            #user-input {
-                padding: 11px 14px;
-            }
-
-            #send-button, #clear-btn {
+            #user-input, button {
                 padding: 11px 15px;
                 font-size: 0.9rem;
+            }
+            
+            #input-area {
+                flex-direction: column; /* 屏幕过小时按钮垂直排列 */
+            }
+            
+            button {
+                margin-left: 0;
+                margin-top: 10px;
+                width: 100%;
             }
         }
     </style>
@@ -255,8 +257,8 @@ HTML_TEMPLATE = '''
         <div id="messages"></div>
         <div id="input-area">
             <input type="text" id="user-input" placeholder="对星星说点什么吧...">
-            <button id="send-button">发送</button>
-            <button id="clear-btn">清空记忆</button>
+            <button id="send-button" onclick="sendMessage()">发送</button>
+            <button id="clear-btn" onclick="clearHistory()">清空记忆</button>
         </div>
     </div>
 
