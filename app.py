@@ -256,7 +256,7 @@ HTML_TEMPLATE = '''
         </div>
         <div id="messages"></div>
         <div id="input-area">
-            <input type="text" id="user-input" placeholder="对星星说点什么吧...">
+            <input type="text" id="user-input" placeholder="对星星说点什么吧..." onkeypress="handleKeyPress(event)">
             <button id="send-button" onclick="sendMessage()">发送</button>
             <button id="clear-btn" onclick="clearHistory()">清空记忆</button>
         </div>
