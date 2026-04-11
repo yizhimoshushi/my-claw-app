@@ -6,6 +6,7 @@ app = Flask(__name__)
 
 # 初始化客户端
 OPENROUTER_API_KEY = os.environ.get("GITHUB_TOKEN")
+MODEL_NAME = os.environ.get("MODEL_NAME")
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=OPENROUTER_API_KEY,
@@ -178,7 +179,7 @@ def chat():
 
         # 调用 OpenRouter
         response = client.chat.completions.create(
-            model="qwen/qwen3.6-plus:free",
+            model=MODEL_NAME,
             extra_headers={
                 "HTTP-Referer": "http://localhost:5000", 
                 "X-Title": "Qwen Chat App",
